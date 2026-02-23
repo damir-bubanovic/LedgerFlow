@@ -1,9 +1,9 @@
 using LedgerFlow.Components;
 using LedgerFlow.Data;
 using LedgerFlow.Models;
+using LedgerFlow.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +21,13 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
+
+// Options
+builder.Services.Configure<StorageOptions>(
+    builder.Configuration.GetSection(StorageOptions.SectionName));
+
+// MVC / API
+builder.Services.AddControllers();
 
 // Razor / Blazor
 builder.Services.AddRazorPages();
@@ -45,6 +52,7 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapControllers();
 app.MapRazorPages();
 
 app.MapRazorComponents<App>()
