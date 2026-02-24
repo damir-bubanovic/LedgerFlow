@@ -1,3 +1,4 @@
+using LedgerFlow.Background;
 using LedgerFlow.Components;
 using LedgerFlow.Data;
 using LedgerFlow.Models;
@@ -25,6 +26,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 // Options
 builder.Services.Configure<StorageOptions>(
     builder.Configuration.GetSection(StorageOptions.SectionName));
+
+// Background processing
+builder.Services.AddSingleton<IInvoiceProcessingQueue, InvoiceProcessingQueue>();
+builder.Services.AddHostedService<InvoiceProcessingWorker>();
 
 // MVC / API
 builder.Services.AddControllers();

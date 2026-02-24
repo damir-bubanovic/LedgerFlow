@@ -1,3 +1,4 @@
+using LedgerFlow.Background;
 using LedgerFlow.Data;
 using LedgerFlow.Models.Invoices;
 using LedgerFlow.Options;
@@ -23,15 +24,18 @@ public class InvoicesController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly UserManager<LedgerFlow.Models.ApplicationUser> _userManager;
     private readonly StorageOptions _storage;
+    private readonly IInvoiceProcessingQueue _queue;
 
     public InvoicesController(
         ApplicationDbContext db,
         UserManager<LedgerFlow.Models.ApplicationUser> userManager,
-        IOptions<StorageOptions> storageOptions)
+        IOptions<StorageOptions> storageOptions,
+        IInvoiceProcessingQueue queue)
     {
         _db = db;
         _userManager = userManager;
         _storage = storageOptions.Value;
+        _queue = queue;
     }
 
     [HttpPost("upload")]
@@ -87,6 +91,9 @@ public class InvoicesController : ControllerBase
 
         _db.Invoices.Add(invoice);
         await _db.SaveChangesAsync(ct);
+
+        // Enqueue for background processing
+        await _queue.EnqueueAsync(invoice.Id, ct);
 
         return Ok(new UploadInvoiceResponse(invoice.Id, doc.Id));
     }

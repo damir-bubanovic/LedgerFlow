@@ -10,5 +10,10 @@ public class Invoice
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Pending;
 
+    // Processing metadata
+    public DateTime? ProcessingStartedAt { get; set; }
+    public DateTime? ProcessingCompletedAt { get; set; }
+    public string? ProcessingError { get; set; }
+
     public ICollection<InvoiceDocument> Documents { get; set; } = new List<InvoiceDocument>();
 }
