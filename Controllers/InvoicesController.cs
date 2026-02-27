@@ -53,7 +53,8 @@ public class InvoicesController : ControllerBase
 
         var userId = _userManager.GetUserId(User);
         if (string.IsNullOrWhiteSpace(userId))
-            return Unauthorized();
+            return Unauthorized();       
+
 
         Directory.CreateDirectory(_storage.UploadsPath);
 
