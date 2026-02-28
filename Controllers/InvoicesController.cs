@@ -51,9 +51,14 @@ public class InvoicesController : ControllerBase
         if (!AllowedContentTypes.Contains(file.ContentType))
             return BadRequest("Unsupported file type. Allowed: PDF, JPG, PNG.");
 
+
+        
         var userId = _userManager.GetUserId(User);
         if (string.IsNullOrWhiteSpace(userId))
-            return Unauthorized();       
+            return Unauthorized();
+        
+        // var userId = _userManager.GetUserId(User) ?? "DEV_VALIDATION_TEST";
+
 
 
         Directory.CreateDirectory(_storage.UploadsPath);

@@ -1,6 +1,7 @@
 using LedgerFlow.Models;
 using LedgerFlow.Models.Extraction;
 using LedgerFlow.Models.Invoices;
+using LedgerFlow.Models.Validation;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,4 +18,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<InvoiceDocument> InvoiceDocuments => Set<InvoiceDocument>();
 
     public DbSet<InvoiceField> InvoiceFields => Set<InvoiceField>();
+
+    public DbSet<InvoiceValidationIssue> InvoiceValidationIssues => Set<InvoiceValidationIssue>();
 }

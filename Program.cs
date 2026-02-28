@@ -6,6 +6,8 @@ using LedgerFlow.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using LedgerFlow.Services.Extraction;
+using LedgerFlow.Services.Validation;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +45,8 @@ builder.Services.AddRazorComponents()
 
 
 builder.Services.AddSingleton<IInvoiceExtractor, StubInvoiceExtractor>();
+
+builder.Services.AddSingleton<IInvoiceValidator, BasicInvoiceValidator>();
 
 
 var app = builder.Build();

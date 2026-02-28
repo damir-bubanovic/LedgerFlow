@@ -1,8 +1,10 @@
 using LedgerFlow.Data;
 using LedgerFlow.Models.Extraction;
 using LedgerFlow.Models.Invoices;
+using LedgerFlow.Models.Validation;
 using LedgerFlow.Options;
 using LedgerFlow.Services.Extraction;
+using LedgerFlow.Services.Validation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -14,9 +16,10 @@ public sealed class InvoiceProcessingWorker : BackgroundService
     private readonly ILogger<InvoiceProcessingWorker> _logger;
     private readonly IInvoiceProcessingQueue _queue;
     private readonly IInvoiceExtractor _extractor;
+    private readonly IInvoiceValidator _validator;
     private readonly StorageOptions _storage;
 
-    // Simple MVP rule: if any required field is missing or below this confidence => NeedsReview
+    // MVP rule: if any required field is missing or below this confidence => NeedsReview
     private const double ReviewThreshold = 0.80;
 
     private static readonly InvoiceFieldType[] RequiredFields =
@@ -31,12 +34,14 @@ public sealed class InvoiceProcessingWorker : BackgroundService
         ILogger<InvoiceProcessingWorker> logger,
         IInvoiceProcessingQueue queue,
         IInvoiceExtractor extractor,
+        IInvoiceValidator validator,
         IOptions<StorageOptions> storageOptions)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _queue = queue;
         _extractor = extractor;
+        _validator = validator;
         _storage = storageOptions.Value;
     }
 
@@ -114,39 +119,61 @@ public sealed class InvoiceProcessingWorker : BackgroundService
             var extraction = await _extractor.ExtractAsync(filePath, ct);
 
             // Remove existing fields (idempotent reprocessing)
-            var existing = await db.InvoiceFields
+            var existingFields = await db.InvoiceFields
                 .Where(f => f.InvoiceId == invoice.Id)
                 .ToListAsync(ct);
 
-            if (existing.Count > 0)
-                db.InvoiceFields.RemoveRange(existing);
+            if (existingFields.Count > 0)
+                db.InvoiceFields.RemoveRange(existingFields);
+
+            // Remove existing validation issues (idempotent)
+            var existingIssues = await db.InvoiceValidationIssues
+                .Where(v => v.InvoiceId == invoice.Id)
+                .ToListAsync(ct);
+
+            if (existingIssues.Count > 0)
+                db.InvoiceValidationIssues.RemoveRange(existingIssues);
 
             // Persist extracted fields
+            var persistedFields = new List<InvoiceField>();
             foreach (var f in extraction.Fields)
             {
-                db.InvoiceFields.Add(new InvoiceField
+                var entity = new InvoiceField
                 {
                     InvoiceId = invoice.Id,
                     FieldType = f.FieldType,
                     Value = f.Value,
                     Confidence = f.Confidence
-                });
+                };
+
+                persistedFields.Add(entity);
+                db.InvoiceFields.Add(entity);
             }
 
-            // Decide status
+            // Validate extracted fields
+            var validation = _validator.Validate(invoice.Id, persistedFields);
+
+            if (validation.Issues.Count > 0)
+                db.InvoiceValidationIssues.AddRange(validation.Issues);
+
+            // Decide status: validation errors always force NeedsReview
             var byType = extraction.Fields.ToDictionary(x => x.FieldType, x => x);
 
-            var needsReview = RequiredFields.Any(t =>
+            var needsReviewByConfidence = RequiredFields.Any(t =>
                 !byType.TryGetValue(t, out var field) ||
                 string.IsNullOrWhiteSpace(field.Value) ||
                 field.Confidence < ReviewThreshold);
+
+            var needsReview = validation.HasErrors || needsReviewByConfidence;
 
             invoice.Status = needsReview ? InvoiceStatus.NeedsReview : InvoiceStatus.Processed;
             invoice.ProcessingCompletedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
 
-            _logger.LogInformation("Invoice {InvoiceId} extracted. Status={Status}", invoiceId, invoice.Status);
+            _logger.LogInformation(
+                "Invoice {InvoiceId} extracted+validated. Status={Status}. Issues={IssueCount}",
+                invoiceId, invoice.Status, validation.Issues.Count);
         }
         catch (Exception ex)
         {
