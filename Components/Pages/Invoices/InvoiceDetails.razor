@@ -1,0 +1,218 @@
+@page "/invoices/{InvoiceId:guid}"
+@attribute [Authorize]
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+
+<h1>Invoice Details</h1>
+
+<button class="btn btn-sm btn-outline-secondary mb-3" @onclick="Back">Back</button>
+
+@if (IsLoading)
+{
+    <div class="alert alert-info">Loading...</div>
+}
+else if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+else if (Invoice is null)
+{
+    <div class="alert alert-secondary">Invoice not found.</div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-12 col-lg-7">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>Document Preview</div>
+                    <span class="badge @StatusBadge(Invoice.Status)">@Invoice.Status</span>
+                </div>
+                <div class="card-body">
+                    @if (PrimaryDocumentUrl is null)
+                    {
+                        <div class="text-muted">No document available.</div>
+                    }
+                    else
+                    {
+                        <iframe src="@PrimaryDocumentUrl" style="width:100%; height:70vh;" class="border rounded"></iframe>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-5">
+            <div class="card mb-4">
+                <div class="card-header">Extracted Fields</div>
+                <div class="card-body">
+                    @if (Fields.Count == 0)
+                    {
+                        <div class="text-muted">No extracted fields found.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Field</th>
+                                        <th>Value</th>
+                                        <th class="text-end">Confidence</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var f in Fields)
+                                    {
+                                        <tr>
+                                            <td>@f.FieldType</td>
+                                            <td>@(string.IsNullOrWhiteSpace(f.Value) ? "-" : f.Value)</td>
+                                            <td class="text-end">@f.Confidence.ToString("0.00")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Validation Results</div>
+                <div class="card-body">
+                    @if (!string.IsNullOrWhiteSpace(Invoice.ProcessingError))
+                    {
+                        <div class="alert alert-danger mb-3">
+                            <div class="fw-semibold">Processing Error</div>
+                            <div>@Invoice.ProcessingError</div>
+                        </div>
+                    }
+
+                    @if (Issues.Count == 0)
+                    {
+                        <div class="alert alert-success mb-0">No validation issues.</div>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var v in Issues)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div class="fw-semibold">@v.Code</div>
+                                        <div class="text-muted">@v.Message</div>
+                                        <div class="text-muted">@v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</div>
+                                    </div>
+                                    <span class="badge @(v.Severity.Equals("Error", StringComparison.OrdinalIgnoreCase) ? "text-bg-danger" : "text-bg-warning")">
+                                        @v.Severity
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid InvoiceId { get; set; }
+
+    private bool IsLoading = true;
+    private string? Error;
+
+    private Invoice? Invoice;
+    private List<FieldRow> Fields = new();
+    private List<IssueRow> Issues = new();
+
+    private string? PrimaryDocumentUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+
+        try
+        {
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = auth.User;
+
+            var userId = UserManager.GetUserId(user);
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                Error = "Not authenticated.";
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            Invoice = await db.Invoices.AsNoTracking()
+                .Include(i => i.Documents)
+                .FirstOrDefaultAsync(i => i.Id == InvoiceId && i.UserId == userId);
+
+            if (Invoice is null)
+                return;
+
+            var docs = Invoice.Documents.OrderByDescending(d => d.UploadedAt).ToList();
+            if (docs.Count > 0)
+            {
+                var doc = docs[0];
+                PrimaryDocumentUrl = $"/api/invoices/{InvoiceId}/documents/{doc.Id}";
+            }
+
+            var fieldEntities = await db.InvoiceFields.AsNoTracking()
+                .Where(f => f.InvoiceId == InvoiceId)
+                .OrderBy(f => f.FieldType)
+                .ToListAsync();
+
+            Fields = fieldEntities.Select(f => new FieldRow(
+                f.FieldType.ToString(),
+                f.Value,
+                f.Confidence
+            )).ToList();
+
+            var issueEntities = await db.InvoiceValidationIssues.AsNoTracking()
+                .Where(v => v.InvoiceId == InvoiceId)
+                .OrderByDescending(v => v.CreatedAt)
+                .ToListAsync();
+
+            Issues = issueEntities.Select(v => new IssueRow(
+                v.Code,
+                v.Message,
+                v.Severity,
+                v.CreatedAt
+            )).ToList();
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void Back() => Nav.NavigateTo("/invoices");
+
+    private static string StatusBadge(InvoiceStatus status) => status switch
+    {
+        InvoiceStatus.Pending => "text-bg-secondary",
+        InvoiceStatus.Processing => "text-bg-info",
+        InvoiceStatus.Processed => "text-bg-success",
+        InvoiceStatus.NeedsReview => "text-bg-warning",
+        InvoiceStatus.Failed => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private sealed record FieldRow(string FieldType, string? Value, double Confidence);
+    private sealed record IssueRow(string Code, string Message, string Severity, DateTime CreatedAt);
+}

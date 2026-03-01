@@ -19,11 +19,6 @@ This roadmap is split into Completed and To-Do chapters for clear development tr
 - Default hosting and development environment
 - Initial GitHub repository
 
----
-
-## 🚧 To-Do Chapters (MVP)
-
----
 
 ### Chapter 2 — Database & Identity
 
@@ -107,7 +102,13 @@ This roadmap is split into Completed and To-Do chapters for clear development tr
   - Extracted values
   - Adjusted values
 
+
 ---
+
+## 🚧 To-Do Chapters (MVP)
+
+---
+
 
 ### Chapter 7 — Management Dashboard
 

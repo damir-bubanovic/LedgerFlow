@@ -8,7 +8,6 @@ using Microsoft.EntityFrameworkCore;
 using LedgerFlow.Services.Extraction;
 using LedgerFlow.Services.Validation;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Database
@@ -18,6 +17,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
+// Use DbContextFactory for Blazor components (avoids long-lived DbContext issues)
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
 // Identity (email + password)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -25,6 +28,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
 .AddDefaultTokenProviders();
+
+// Authorization for Blazor components
+builder.Services.AddAuthorization();
+builder.Services.AddCascadingAuthenticationState();
 
 // Options
 builder.Services.Configure<StorageOptions>(
@@ -43,11 +50,8 @@ builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-
 builder.Services.AddSingleton<IInvoiceExtractor, StubInvoiceExtractor>();
-
 builder.Services.AddSingleton<IInvoiceValidator, BasicInvoiceValidator>();
-
 
 var app = builder.Build();
 

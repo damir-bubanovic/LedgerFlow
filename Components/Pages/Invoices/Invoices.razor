@@ -1,0 +1,177 @@
+@page "/invoices"
+@attribute [Authorize]
+
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+
+<h1>Invoices</h1>
+
+<div class="row g-3 align-items-end mb-3">
+    <div class="col-12 col-md-4">
+        <label class="form-label">Status</label>
+        <select class="form-select" @bind="SelectedStatus" @bind:after="OnStatusChanged">
+            <option value="">All</option>
+            @foreach (var s in AllStatuses)
+            {
+                <option value="@s">@s</option>
+            }
+        </select>
+    </div>
+    <div class="col-12 col-md-8">
+        <div class="text-muted">
+            Showing @Items.Count invoice(s)
+        </div>
+    </div>
+</div>
+
+@if (IsLoading)
+{
+    <div class="alert alert-info">Loading...</div>
+}
+else if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+else if (Items.Count == 0)
+{
+    <div class="alert alert-secondary">No invoices found for this filter.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Vendor</th>
+                    <th>Invoice Date</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var i in Items)
+                {
+                    <tr>
+                        <td>@(i.Vendor ?? "-")</td>
+                        <td>@(i.InvoiceDate ?? "-")</td>
+                        <td>@(i.Total ?? "-")</td>
+                        <td>
+                            <span class="badge @StatusBadge(i.Status)">@i.Status</span>
+                        </td>
+                        <td>@i.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Open(i.Id)">
+                                View
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private bool IsLoading = true;
+    private string? Error;
+
+    private List<Row> Items = new();
+
+    private string SelectedStatus = "";
+    private static readonly string[] AllStatuses = Enum.GetNames(typeof(InvoiceStatus));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task OnStatusChanged()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        IsLoading = true;
+        Error = null;
+        Items.Clear();
+
+        try
+        {
+            var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = auth.User;
+
+            var userId = UserManager.GetUserId(user);
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                Error = "Not authenticated.";
+                return;
+            }
+
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var q = db.Invoices.AsNoTracking()
+                .Where(i => i.UserId == userId);
+
+            if (!string.IsNullOrWhiteSpace(SelectedStatus) &&
+                Enum.TryParse<InvoiceStatus>(SelectedStatus, ignoreCase: true, out var parsed))
+            {
+                q = q.Where(i => i.Status == parsed);
+            }
+
+            var invoices = await q.OrderByDescending(i => i.CreatedAt)
+                .Take(200)
+                .ToListAsync();
+
+            var ids = invoices.Select(i => i.Id).ToList();
+
+            var fields = await db.InvoiceFields.AsNoTracking()
+                .Where(f => ids.Contains(f.InvoiceId))
+                .ToListAsync();
+
+            string? Pick(Guid invoiceId, InvoiceFieldType type) =>
+                fields.FirstOrDefault(f => f.InvoiceId == invoiceId && f.FieldType == type)?.Value;
+
+            Items = invoices.Select(i => new Row(
+                i.Id,
+                i.CreatedAt,
+                i.Status.ToString(),
+                Vendor: Pick(i.Id, InvoiceFieldType.Vendor),
+                InvoiceDate: Pick(i.Id, InvoiceFieldType.InvoiceDate),
+                Total: Pick(i.Id, InvoiceFieldType.Total)
+            )).ToList();
+        }
+        catch (Exception ex)
+        {
+            Error = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void Open(Guid id) => Nav.NavigateTo($"/invoices/{id}");
+
+    private static string StatusBadge(string status) => status switch
+    {
+        "Pending" => "text-bg-secondary",
+        "Processing" => "text-bg-info",
+        "Processed" => "text-bg-success",
+        "NeedsReview" => "text-bg-warning",
+        "Failed" => "text-bg-danger",
+        _ => "text-bg-secondary"
+    };
+
+    private sealed record Row(
+        Guid Id,
+        DateTime CreatedAt,
+        string Status,
+        string? Vendor,
+        string? InvoiceDate,
+        string? Total);
+}
