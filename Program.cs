@@ -18,8 +18,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // Use DbContextFactory for Blazor components (avoids long-lived DbContext issues)
-builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+// IMPORTANT: make DbContextFactory scoped to avoid singleton->scoped dependency issues (EF tooling)
+builder.Services.AddDbContextFactory<ApplicationDbContext>(
+    options => options.UseNpgsql(connectionString),
+    ServiceLifetime.Scoped);
 
 // Identity (email + password)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -27,7 +29,8 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.SignIn.RequireConfirmedAccount = false;
 })
 .AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
+.AddDefaultTokenProviders()
+.AddDefaultUI();
 
 // Authorization for Blazor components
 builder.Services.AddAuthorization();
@@ -43,6 +46,7 @@ builder.Services.AddHostedService<InvoiceProcessingWorker>();
 
 // MVC / API
 builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 
 // Razor / Blazor
 builder.Services.AddRazorPages();
