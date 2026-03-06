@@ -1,0 +1,32 @@
+@page "/invoices/upload"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<h1>Upload Invoice</h1>
+
+<div class="card" style="max-width: 720px;">
+    <div class="card-body">
+        <p class="text-muted mb-3">
+            Upload a PDF, JPG, or PNG. After upload, the invoice will appear in the Invoices list and be processed in the background.
+        </p>
+
+        <form method="post" action="/api/invoices/upload" enctype="multipart/form-data">
+            <div class="mb-3">
+                <input class="form-control"
+                       type="file"
+                       name="file"
+                       accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    Upload
+                </button>
+
+                <a class="btn btn-outline-secondary" href="/invoices">
+                    Back to Invoices
+                </a>
+            </div>
+        </form>
+    </div>
+</div>

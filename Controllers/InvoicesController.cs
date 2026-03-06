@@ -27,22 +27,25 @@ public class InvoicesController : ControllerBase
     private readonly UserManager<LedgerFlow.Models.ApplicationUser> _userManager;
     private readonly StorageOptions _storage;
     private readonly IInvoiceProcessingQueue _queue;
+    private readonly IWebHostEnvironment _environment;
 
     public InvoicesController(
         ApplicationDbContext db,
         UserManager<LedgerFlow.Models.ApplicationUser> userManager,
         IOptions<StorageOptions> storageOptions,
-        IInvoiceProcessingQueue queue)
+        IInvoiceProcessingQueue queue,
+        IWebHostEnvironment environment)
     {
         _db = db;
         _userManager = userManager;
         _storage = storageOptions.Value;
         _queue = queue;
+        _environment = environment;
     }
 
     [HttpPost("upload")]
     [RequestSizeLimit(long.MaxValue)]
-    public async Task<ActionResult<UploadInvoiceResponse>> Upload([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> Upload([FromForm] IFormFile file, CancellationToken ct)
     {
         if (file is null || file.Length <= 0)
             return BadRequest("File is required.");
@@ -57,7 +60,8 @@ public class InvoicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(userId))
             return Unauthorized();
 
-        Directory.CreateDirectory(_storage.UploadsPath);
+        var uploadsRoot = GetUploadsRootPath();
+        Directory.CreateDirectory(uploadsRoot);
 
         var extension = Path.GetExtension(file.FileName);
         if (string.IsNullOrWhiteSpace(extension))
@@ -68,7 +72,7 @@ public class InvoicesController : ControllerBase
         }
 
         var storedFileName = $"{Guid.NewGuid():N}{extension}";
-        var storedPath = Path.Combine(_storage.UploadsPath, storedFileName);
+        var storedPath = Path.Combine(uploadsRoot, storedFileName);
 
         await using (var stream = System.IO.File.Create(storedPath))
         {
@@ -94,15 +98,16 @@ public class InvoicesController : ControllerBase
         _db.Invoices.Add(invoice);
         await _db.SaveChangesAsync(ct);
 
-        // Enqueue for background processing
         await _queue.EnqueueAsync(invoice.Id, ct);
+
+        var acceptsHtml = Request.Headers.Accept.Any(h =>
+            h?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (acceptsHtml)
+            return Redirect($"/invoices/{invoice.Id}");
 
         return Ok(new UploadInvoiceResponse(invoice.Id, doc.Id));
     }
-
-    // ---------------------------
-    // Dashboard endpoints (Chapter 7)
-    // ---------------------------
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<InvoiceListItemDto>>> List([FromQuery] string? status, CancellationToken ct)
@@ -224,16 +229,23 @@ public class InvoicesController : ControllerBase
         if (doc is null)
             return NotFound();
 
-        var filePath = Path.Combine(_storage.UploadsPath, doc.StoredFileName);
+        var filePath = Path.Combine(GetUploadsRootPath(), doc.StoredFileName);
         if (!System.IO.File.Exists(filePath))
             return NotFound();
 
         var contentType = GetContentTypeFromExtension(Path.GetExtension(doc.StoredFileName));
 
-        // Inline so PDFs/images render in browser preview
         Response.Headers["Content-Disposition"] = $"inline; filename=\"{doc.OriginalFileName}\"";
 
         return PhysicalFile(filePath, contentType, enableRangeProcessing: true);
+    }
+
+    private string GetUploadsRootPath()
+    {
+        if (Path.IsPathRooted(_storage.UploadsPath))
+            return _storage.UploadsPath;
+
+        return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, _storage.UploadsPath));
     }
 
     private static string GetContentTypeFromExtension(string? ext)
@@ -251,7 +263,6 @@ public class InvoicesController : ControllerBase
 
 public sealed record UploadInvoiceResponse(Guid InvoiceId, Guid DocumentId);
 
-// DTOs for dashboard
 public sealed record InvoiceListItemDto(
     Guid Id,
     DateTime CreatedAt,
