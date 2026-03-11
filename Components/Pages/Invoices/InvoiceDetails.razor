@@ -8,7 +8,9 @@
 
 <h1>Invoice Details</h1>
 
-<button class="btn btn-sm btn-outline-secondary mb-3" @onclick="Back">Back</button>
+<a class="btn btn-sm btn-outline-secondary mb-3" href="/invoices">
+    Back
+</a>
 
 @if (IsLoading)
 {
@@ -201,7 +203,6 @@ else
         }
     }
 
-    private void Back() => Nav.NavigateTo("/invoices");
 
     private static string StatusBadge(InvoiceStatus status) => status switch
     {

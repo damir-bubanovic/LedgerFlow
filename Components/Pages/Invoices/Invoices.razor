@@ -64,9 +64,9 @@ else
                         </td>
                         <td>@i.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Open(i.Id)">
+                            <a class="btn btn-sm btn-outline-primary" href="@($"/invoices/{i.Id}")">
                                 View
-                            </button>
+                            </a>
                         </td>
                     </tr>
                 }
@@ -155,7 +155,6 @@ else
         }
     }
 
-    private void Open(Guid id) => Nav.NavigateTo($"/invoices/{id}");
 
     private static string StatusBadge(string status) => status switch
     {

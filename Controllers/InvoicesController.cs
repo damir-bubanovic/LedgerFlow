@@ -45,16 +45,34 @@ public class InvoicesController : ControllerBase
 
     [HttpPost("upload")]
     [RequestSizeLimit(long.MaxValue)]
-    public async Task<IActionResult> Upload([FromForm] IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> Upload([FromForm] IFormFile? file, CancellationToken ct)
     {
+        var acceptsHtml = Request.Headers.Accept.Any(h =>
+            h?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+
         if (file is null || file.Length <= 0)
-            return BadRequest("File is required.");
+        {
+            if (acceptsHtml)
+                return Redirect("/invoices/upload?error=Please select a file before uploading.");
+
+            return BadRequest(new { error = "The file field is required." });
+        }
 
         if (file.Length > _storage.MaxUploadBytes)
-            return BadRequest($"File is too large. Max allowed is {_storage.MaxUploadBytes} bytes.");
+        {
+            if (acceptsHtml)
+                return Redirect("/invoices/upload?error=File is too large.");
+
+            return BadRequest(new { error = $"File is too large. Max allowed is {_storage.MaxUploadBytes} bytes." });
+        }
 
         if (!AllowedContentTypes.Contains(file.ContentType))
-            return BadRequest("Unsupported file type. Allowed: PDF, JPG, PNG.");
+        {
+            if (acceptsHtml)
+                return Redirect("/invoices/upload?error=Unsupported file type. Allowed: PDF, JPG, PNG.");
+
+            return BadRequest(new { error = "Unsupported file type. Allowed: PDF, JPG, PNG." });
+        }
 
         var userId = _userManager.GetUserId(User);
         if (string.IsNullOrWhiteSpace(userId))
@@ -99,9 +117,6 @@ public class InvoicesController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         await _queue.EnqueueAsync(invoice.Id, ct);
-
-        var acceptsHtml = Request.Headers.Accept.Any(h =>
-            h?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
 
         if (acceptsHtml)
             return Redirect($"/invoices/{invoice.Id}");

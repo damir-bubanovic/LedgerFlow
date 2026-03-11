@@ -1,8 +1,16 @@
 @page "/invoices/upload"
 @attribute [Authorize]
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components
 
 <h1>Upload Invoice</h1>
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">
+        @Error
+    </div>
+}
 
 <div class="card" style="max-width: 720px;">
     <div class="card-body">
@@ -30,3 +38,8 @@
         </form>
     </div>
 </div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+}
