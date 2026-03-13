@@ -41,10 +41,11 @@ This roadmap is split into Completed and To-Do chapters for clear development tr
 
 - Manual invoice upload:
   - PDF
-  - JPG / PNG
 - Server-side validation:
+  - File required
   - File size
   - MIME type
+  - PDF-only restriction
 - File storage:
   - Local development storage
   - Abstraction for cloud storage later
@@ -73,20 +74,20 @@ This roadmap is split into Completed and To-Do chapters for clear development tr
 
 ---
 
-### Chapter 5 — AI Document Extraction
+### Chapter 5 — Document Extraction
 
-- OCR + AI integration:
+- PDF text extraction for text-based invoices
+- Regex-based field extraction:
   - Vendor name
   - Invoice date
   - Invoice number
   - Subtotal
   - VAT / tax
   - Total amount
-- Store:
-  - Raw extracted text
-  - Structured fields
-  - Confidence scores
-- Error handling for malformed documents
+- Store structured fields
+- Store confidence scores
+- Error handling for malformed or unsupported documents
+- Fallback behavior for missing fields
 
 ---
 
@@ -119,6 +120,10 @@ This roadmap is split into Completed and To-Do chapters for clear development tr
   - Processed
   - Failed
   - NeedsReview
+- Invoice deletion:
+  - Remove invoice from database
+  - Remove related extracted fields and validation issues
+  - Remove uploaded file from storage
 
 ---
 
