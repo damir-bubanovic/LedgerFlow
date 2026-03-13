@@ -123,7 +123,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddSingleton<IInvoiceExtractor, StubInvoiceExtractor>();
+builder.Services.AddSingleton<IInvoiceExtractor, PdfTextInvoiceExtractor>();
 builder.Services.AddSingleton<IInvoiceValidator, BasicInvoiceValidator>();
 
 var app = builder.Build();

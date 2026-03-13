@@ -18,9 +18,7 @@ public class InvoicesController : ControllerBase
 {
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "application/pdf",
-        "image/jpeg",
-        "image/png"
+        "application/pdf"
     };
 
     private readonly ApplicationDbContext _db;
@@ -53,7 +51,7 @@ public class InvoicesController : ControllerBase
         if (file is null || file.Length <= 0)
         {
             if (acceptsHtml)
-                return Redirect("/invoices/upload?error=Please select a file before uploading.");
+                return Redirect("/invoices/upload?error=Please select a PDF file before uploading.");
 
             return BadRequest(new { error = "The file field is required." });
         }
@@ -66,12 +64,17 @@ public class InvoicesController : ControllerBase
             return BadRequest(new { error = $"File is too large. Max allowed is {_storage.MaxUploadBytes} bytes." });
         }
 
-        if (!AllowedContentTypes.Contains(file.ContentType))
+        var extension = Path.GetExtension(file.FileName);
+
+        var isPdfContentType = AllowedContentTypes.Contains(file.ContentType);
+        var isPdfExtension = string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPdfContentType || !isPdfExtension)
         {
             if (acceptsHtml)
-                return Redirect("/invoices/upload?error=Unsupported file type. Allowed: PDF, JPG, PNG.");
+                return Redirect("/invoices/upload?error=Unsupported file type. Only PDF files are allowed.");
 
-            return BadRequest(new { error = "Unsupported file type. Allowed: PDF, JPG, PNG." });
+            return BadRequest(new { error = "Unsupported file type. Only PDF files are allowed." });
         }
 
         var userId = _userManager.GetUserId(User);
@@ -81,15 +84,7 @@ public class InvoicesController : ControllerBase
         var uploadsRoot = GetUploadsRootPath();
         Directory.CreateDirectory(uploadsRoot);
 
-        var extension = Path.GetExtension(file.FileName);
-        if (string.IsNullOrWhiteSpace(extension))
-        {
-            extension = file.ContentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase) ? ".pdf"
-                : file.ContentType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase) ? ".jpg"
-                : ".png";
-        }
-
-        var storedFileName = $"{Guid.NewGuid():N}{extension}";
+        var storedFileName = $"{Guid.NewGuid():N}.pdf";
         var storedPath = Path.Combine(uploadsRoot, storedFileName);
 
         await using (var stream = System.IO.File.Create(storedPath))
@@ -245,6 +240,10 @@ public class InvoicesController : ControllerBase
             return NotFound();
 
         var filePath = Path.Combine(GetUploadsRootPath(), doc.StoredFileName);
+
+        Console.WriteLine($"[LedgerFlow] Document path: {filePath}");
+        Console.WriteLine($"[LedgerFlow] File exists: {System.IO.File.Exists(filePath)}");
+
         if (!System.IO.File.Exists(filePath))
             return NotFound();
 
@@ -257,10 +256,16 @@ public class InvoicesController : ControllerBase
 
     private string GetUploadsRootPath()
     {
-        if (Path.IsPathRooted(_storage.UploadsPath))
-            return _storage.UploadsPath;
+        string path;
 
-        return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, _storage.UploadsPath));
+        if (Path.IsPathRooted(_storage.UploadsPath))
+            path = _storage.UploadsPath;
+        else
+            path = Path.GetFullPath(Path.Combine(_environment.ContentRootPath, _storage.UploadsPath));
+
+        Console.WriteLine($"[LedgerFlow] Uploads path: {path}");
+
+        return path;
     }
 
     private static string GetContentTypeFromExtension(string? ext)
@@ -269,8 +274,6 @@ public class InvoicesController : ControllerBase
         return ext switch
         {
             ".pdf" => "application/pdf",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
             _ => "application/octet-stream"
         };
     }
