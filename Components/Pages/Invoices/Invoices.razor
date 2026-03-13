@@ -63,11 +63,24 @@ else
                             <span class="badge @StatusBadge(i.Status)">@i.Status</span>
                         </td>
                         <td>@i.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+
                         <td class="text-end">
-                            <a class="btn btn-sm btn-outline-primary" href="@($"/invoices/{i.Id}")">
-                                View
-                            </a>
+                            <div class="d-flex justify-content-end gap-2">
+                                <a class="btn btn-sm btn-outline-primary" href="@($"/invoices/{i.Id}")">
+                                    View
+                                </a>
+
+                                <form method="post" action="@($"/api/invoices/{i.Id}/delete")" style="display:inline;">
+                                    <AntiforgeryToken />
+                                    <button type="submit"
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Delete this invoice? This will remove the file and all related data.');">
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
                         </td>
+
                     </tr>
                 }
             </tbody>

@@ -8,9 +8,20 @@
 
 <h1>Invoice Details</h1>
 
-<a class="btn btn-sm btn-outline-secondary mb-3" href="/invoices">
-    Back
-</a>
+<div class="d-flex gap-2 mb-3">
+    <a class="btn btn-sm btn-outline-secondary" href="/invoices">
+        Back
+    </a>
+
+    <form method="post" action="@($"/api/invoices/{InvoiceId}/delete")" style="display:inline;">
+        <AntiforgeryToken />
+        <button type="submit"
+                class="btn btn-sm btn-outline-danger"
+                onclick="return confirm('Delete this invoice? This will remove the file and all related data.');">
+            Delete
+        </button>
+    </form>
+</div>
 
 @if (IsLoading)
 {

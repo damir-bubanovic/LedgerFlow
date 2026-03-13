@@ -241,9 +241,6 @@ public class InvoicesController : ControllerBase
 
         var filePath = Path.Combine(GetUploadsRootPath(), doc.StoredFileName);
 
-        Console.WriteLine($"[LedgerFlow] Document path: {filePath}");
-        Console.WriteLine($"[LedgerFlow] File exists: {System.IO.File.Exists(filePath)}");
-
         if (!System.IO.File.Exists(filePath))
             return NotFound();
 
@@ -263,8 +260,6 @@ public class InvoicesController : ControllerBase
         else
             path = Path.GetFullPath(Path.Combine(_environment.ContentRootPath, _storage.UploadsPath));
 
-        Console.WriteLine($"[LedgerFlow] Uploads path: {path}");
-
         return path;
     }
 
@@ -277,6 +272,67 @@ public class InvoicesController : ControllerBase
             _ => "application/octet-stream"
         };
     }
+
+
+
+
+    [HttpPost("{invoiceId:guid}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(Guid invoiceId, CancellationToken ct)
+    {
+        var userId = _userManager.GetUserId(User);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized();
+
+        var invoice = await _db.Invoices
+            .Include(i => i.Documents)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && i.UserId == userId, ct);
+
+        if (invoice is null)
+            return NotFound();
+
+        var uploadsRoot = GetUploadsRootPath();
+
+        var existingFields = await _db.InvoiceFields
+            .Where(f => f.InvoiceId == invoiceId)
+            .ToListAsync(ct);
+
+        if (existingFields.Count > 0)
+            _db.InvoiceFields.RemoveRange(existingFields);
+
+        var existingIssues = await _db.InvoiceValidationIssues
+            .Where(v => v.InvoiceId == invoiceId)
+            .ToListAsync(ct);
+
+        if (existingIssues.Count > 0)
+            _db.InvoiceValidationIssues.RemoveRange(existingIssues);
+
+        foreach (var doc in invoice.Documents)
+        {
+            var filePath = Path.Combine(uploadsRoot, doc.StoredFileName);
+
+            if (System.IO.File.Exists(filePath))
+                System.IO.File.Delete(filePath);
+        }
+
+        _db.InvoiceDocuments.RemoveRange(invoice.Documents);
+        _db.Invoices.Remove(invoice);
+
+        await _db.SaveChangesAsync(ct);
+
+        var acceptsHtml = Request.Headers.Accept.Any(h =>
+            h?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (acceptsHtml)
+            return Redirect("/invoices");
+
+        return NoContent();
+    }
+
+
+
+
+
 }
 
 public sealed record UploadInvoiceResponse(Guid InvoiceId, Guid DocumentId);
